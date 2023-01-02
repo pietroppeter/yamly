@@ -1,7 +1,17 @@
-# You can use this nim template to jump start your nim library or project.
+# syamly
 
-This template includes:
-* MIT licence
-* src directory and a private common.nim
-* test directory
-* GitHub Actions to run the tests on GitHub
+a type-safe parser of a restricted subset of yaml inspired by [strictyaml](https://github.com/crdoconnor/strictyaml)
+and [jsony](https://github.com/treeform/jsony)
+
+## todo
+
+- [ ] numbers
+  - [x] dump
+  - [ ] parse
+- [ ] boolean
+- [ ] sequence
+- [ ] object
+- [ ] string
+- [ ] enum
+- [ ] tuple
+- [ ] array
