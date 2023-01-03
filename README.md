@@ -6,9 +6,9 @@ and [jsony](https://github.com/treeform/jsony)
 
 ## todo
 
-- [ ] numbers
+- [x] numbers
   - [x] dump
-  - [ ] parse
+  - [x] parse
 - [ ] object
 - [ ] boolean
 - [ ] sequence
