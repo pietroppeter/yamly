@@ -21,12 +21,8 @@ block:
 
 block:
   # parsing error
-  try:
+  doAssertRaises(ValueError):
     discard "a".fromYaml(int)
-    doAssert false, "an error should be raised"
-  except ValueError:
-    doAssert true, "expected"
-
 
 block:
   # not valid yaml
@@ -37,11 +33,8 @@ a:
 """
   var idx = 7
   var v: int
-  try:
+  doAssertRaises(YamlError):
     parseHook(s, idx, 2, v)
-    doAssert false, "an error should be raised"
-  except YamlError:
-    doAssert true, "expected"
 
 block:
   # valid yaml
