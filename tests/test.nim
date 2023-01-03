@@ -20,6 +20,15 @@ block:
   doAssert "10_000".fromYaml(int) == 10_000
 
 block:
+  # parsing error
+  try:
+    discard "a".fromYaml(int)
+    doAssert false, "an error should be raised"
+  except ValueError:
+    doAssert true, "expected"
+
+
+block:
   # not valid yaml
   let s = """
 a:
