@@ -50,3 +50,27 @@ a:
   var v: int
   parseHook(s, idx, 2, v)
   doAssert v == 1
+
+block:
+  # dump objects
+  type Obj = object
+    a: int
+    b: float
+  
+  let o = Obj(a: 1, b: 1.5)
+  doAssert o.toYaml == """
+a: 1
+b: 1.5
+"""
+
+  type ObjObj = object
+    c: int
+    d: Obj
+  
+  let oo = ObjObj(c:2, d: o)
+  doAssert oo.toYaml == """
+c: 2
+d:
+  a: 1
+  b: 1.5
+"""
