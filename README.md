@@ -6,16 +6,25 @@ and [jsony](https://github.com/treeform/jsony)
 
 ## todo
 
-- [x] numbers
-  - [x] dump
-  - [x] parse
-- [ ] object
-- [ ] boolean
-- [ ] sequence
+- [ ] symbols
+  - [x] numbers
+    - [x] dump
+    - [x] parse
+  - [ ] boolean
+  - [ ] enum
+- [ ] containers
+  - [ ] object
+  - [ ] sequence
+  - [ ] tuple
+  - [ ] array
+  - [ ] sets
+  - [ ] tables
 - [ ] string
-- [ ] enum
-- [ ] tuple
-- [ ] array
 - [ ] json
-- [ ] sets
-- [ ] tables
+- [ ] distinct
+
+## dev notes
+
+- (!=yaml) disallowing tab in spaces
+- (!=jsony) parseHook requires an indentation field
+- (!=jsony) not implementing fast dumping and parsing of numbers
