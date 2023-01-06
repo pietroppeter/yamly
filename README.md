@@ -14,6 +14,8 @@ and [jsony](https://github.com/treeform/jsony)
   - [ ] enum
 - [ ] containers
   - [ ] object
+    - [x] dump
+    - [ ] parse
   - [ ] sequence
   - [ ] tuple
   - [ ] array
@@ -28,3 +30,4 @@ and [jsony](https://github.com/treeform/jsony)
 - (!=yaml) disallowing tab in spaces
 - (!=jsony) parseHook requires an indentation field
 - (!=jsony) not implementing fast dumping and parsing of numbers
+- (!=jsony) using unittest (I like the check output in case of failing test)

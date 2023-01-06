@@ -76,12 +76,44 @@ proc fromYaml*[T](s: string, x: typedesc[T]): T =
     ind = 0
   s.parseHook(idx, ind, result)
 
-proc dumpHook*(s: var string, v: SomeNumber) =
+proc dumpHook*(s: var string, ind: int, v: SomeNumber) =
+  if ind > 0:
+    s.add ' '
   s.add $v
 
+template dumpKey(s: var string, v: string) =
+  const v2 = $v & ':'
+  s.add v2
+
+proc dumpHook*(s: var string, ind: var int, v: object) =
+  var i = 0
+  if ind > 0:
+    s.add "\p" & ' '.repeat(ind)
+  when compiles(for k, e in v.pairs: discard):
+    # Tables and table like objects. TODO
+    for k, e in v.pairs:
+      if i > 0:
+        s.add "\p" & ' '.repeat(ind)
+      s.dumpHook(ind, k) # likely needs to change
+      s.add ':'
+      ind.inc 2
+      s.dumpHook(ind, e)
+      ind.dec 2
+      inc i
+  else:
+    # Normal objects.
+    for k, e in v.fieldPairs:
+      if i > 0:
+        s.add "\p" & ' '.repeat(ind)
+      s.dumpKey(k)
+      ind.inc 2
+      s.dumpHook(ind, e)
+      ind.dec 2
+      inc i
 
 proc toYaml*[T](v: T): string =
-  dumpHook(result, v)
+  var ind = 0
+  dumpHook(result, ind, v)
 
 when defined(release):
   {.pop.}
