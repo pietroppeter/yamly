@@ -14,6 +14,7 @@ Features of Yaml that are **not** implemented:
 - tagging with ! or !!
 - complex mapping keys (which use ?)
 - yaml set type (e.g. a list that uses `?` instead of `-`, or other formats). Note that a list can be parsed as set if the type is specified to be a nim bit set or hash set.
+- cannot use tab for whitespace anywhere (in yaml you cannot use tab for indentation but you can use it for generic whitespace)
 
 I will likely implement flow-style for sequences (`[1, 2]`, useful also for the empty sequence) but I will likely not implement it for objects (`{a:1,b:2}`).
 
@@ -31,6 +32,7 @@ I will likely implement flow-style for sequences (`[1, 2]`, useful also for the 
 - [ ] containers
   - [ ] object
     - [x] dump
+      - [ ] dump key that needs to be quoted (e.g. starts with ", contains invalid characters, ...)
     - [ ] parse
     - [ ] flow-style? likely not
   - [ ] sequence

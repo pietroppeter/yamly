@@ -23,12 +23,14 @@ when defined(release):
 proc eatSpace*(y: var YamlParseContext): int =
   ## consumes whitespace (only space, no tabs, no newline!)
   ## and returns how much it has eaten
-  while y.ch == ' ':
-    inc result
+  let idx = y.idx
+  while y.hasChar and y.ch == ' ':
     inc y.idx
+  y.idx - idx
 
 proc eatSpaceAndComments*(y: var YamlParseContext): int =
   ## eats away space and comments and returns final indentation
+  ## it does NOT change y's indentation
   result = y.ind
   var seenNewline = false
   while y.hasChar:
@@ -53,8 +55,7 @@ proc eatSpaceAndComments*(y: var YamlParseContext): int =
 proc parseSymbol*(y: var YamlParseContext): string =
   ## parses a symbol and returns it
   ## used for numbers and booleans
-  let ind = y.ind
-  if y.eatSpaceAndComments < ind:
+  if y.eatSpaceAndComments < y.ind:
     y.error("Symbol appears before indentation")
   let idx = y.idx
   while y.hasChar:
