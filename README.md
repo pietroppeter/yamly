@@ -1,8 +1,8 @@
-# syamly
+# yamly
 
-a type-safe parser for a reasonable yaml dialect.
-Inspired by [strictyaml](https://github.com/crdoconnor/strictyaml)
-and [jsony](https://github.com/treeform/jsony)
+A type-safe parser for a reasonable yaml dialect (i.e. not the full yaml specs).
+Implementation is basically an adaptation of [jsony](https://github.com/treeform/jsony) to yaml.
+Somewhat inspired by [strictyaml](https://github.com/crdoconnor/strictyaml).
 
 ## todo
 

@@ -1,4 +1,4 @@
-import syamly, std / unittest
+import yamly, std / unittest
 
 suite "numbers":
   test "dump numbers":
