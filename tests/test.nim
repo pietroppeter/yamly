@@ -116,6 +116,7 @@ h:
     b: 1.5
   e: 2"""
 
+    # objects mixed with sequences
     let so = @[
       Obj(a:1, b:1.0),
       Obj(a:2, b:2.0),
