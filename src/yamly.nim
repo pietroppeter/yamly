@@ -81,6 +81,19 @@ proc dumpHook*(s: var string, ind: int, v: SomeNumber) =
     s.add ' '
   s.add $v
 
+proc dumpHook*[T](s: var string, ind: var int, a: seq[T]) =
+  var i = 0
+  if ind > 0:
+    s.add "\p" & ' '.repeat(ind)
+  for v in a:
+    if i > 0:
+      s.add "\p" & ' '.repeat(ind)
+    s.add "-"
+    ind.inc 2
+    s.dumpHook(ind, v)
+    ind.dec 2
+    inc i
+
 template dumpKey(s: var string, v: string) =
   const v2 = $v & ':'
   s.add v2
@@ -88,7 +101,10 @@ template dumpKey(s: var string, v: string) =
 proc dumpHook*(s: var string, ind: var int, v: object) =
   var i = 0
   if ind > 0:
-    s.add "\p" & ' '.repeat(ind)
+    if s[^1] == ':':
+      s.add "\p" & ' '.repeat(ind)
+    else:
+      s.add ' '
   when compiles(for k, e in v.pairs: discard):
     # Tables and table like objects. TODO
     for k, e in v.pairs:

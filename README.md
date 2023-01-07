@@ -17,6 +17,7 @@ Somewhat inspired by [strictyaml](https://github.com/crdoconnor/strictyaml).
     - [x] dump
     - [ ] parse
   - [ ] sequence
+    - [x] dump
   - [ ] tuple
   - [ ] array
   - [ ] sets

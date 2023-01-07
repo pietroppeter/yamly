@@ -49,6 +49,23 @@ a:
     parseHook(s, idx, 2, v)
     check v == 1
 
+suite "sequences":
+  test "dump sequences":
+    let a = @[1, 2, 3]
+    check a.toYaml == """
+- 1
+- 2
+- 3"""
+
+    let aa = @[@[1.0, 2.0], @[3.0, 4.0]]
+    check aa.toYaml == """
+-
+  - 1.0
+  - 2.0
+-
+  - 3.0
+  - 4.0"""
+
 suite "objects":
 
   test "dump objects":
@@ -90,3 +107,22 @@ h:
     b: 1.5
   e: 2"""
 
+    let so = @[
+      Obj(a:1, b:1.0),
+      Obj(a:2, b:2.0),
+    ]
+    check so.toYaml == """
+- a: 1
+  b: 1.0
+- a: 2
+  b: 2.0"""
+
+    type ObjSeq = object
+      vals: seq[int]
+
+    let os = ObjSeq(vals: @[1, 2, 3])
+    check os.toYaml == """
+vals:
+  - 1
+  - 2
+  - 3"""
