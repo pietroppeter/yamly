@@ -87,10 +87,10 @@ proc dumpHook*[T](s: var string, ind: var int, a: openarray[T]) =
     return
   var i = 0
   if ind > 0:
-    s.add "\p" & ' '.repeat(ind)
+    s.add '\n' & ' '.repeat(ind)
   for v in a:
     if i > 0:
-      s.add "\p" & ' '.repeat(ind)
+      s.add '\n' & ' '.repeat(ind)
     s.add "-"
     ind.inc 2
     s.dumpHook(ind, v)
@@ -105,14 +105,14 @@ proc dumpHook*(s: var string, ind: var int, v: object) =
   var i = 0
   if ind > 0:
     if s[^1] == ':':
-      s.add "\p" & ' '.repeat(ind)
+      s.add '\n' & ' '.repeat(ind)
     else:
       s.add ' '
   when compiles(for k, e in v.pairs: discard):
     # Tables and table like objects. TODO
     for k, e in v.pairs:
       if i > 0:
-        s.add "\p" & ' '.repeat(ind)
+        s.add '\n' & ' '.repeat(ind)
       s.dumpHook(ind, k) # likely needs to change
       s.add ':'
       ind.inc 2
@@ -123,7 +123,7 @@ proc dumpHook*(s: var string, ind: var int, v: object) =
     # Normal objects.
     for k, e in v.fieldPairs:
       if i > 0:
-        s.add "\p" & ' '.repeat(ind)
+        s.add '\n' & ' '.repeat(ind)
       s.dumpKey(k)
       ind.inc 2
       s.dumpHook(ind, e)
