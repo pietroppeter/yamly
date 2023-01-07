@@ -29,10 +29,10 @@ a:
   b:
  1
 """
-    var idx = 7
+    var y = YamlParseContext(data: s, idx: 7, ind:2)
     var v: int
     expect(YamlError):
-      parseHook(s, idx, 2, v)
+      y.parseHook(v)
 
 suite "eatUtils":
   test "eatSpaceAndComments":
@@ -44,9 +44,9 @@ a:
      # comment
    1
 """
-    var idx = 7
+    var y = YamlParseContext(data: s, idx: 7, ind:2)
     var v: int
-    parseHook(s, idx, 2, v)
+    y.parseHook(v)
     check v == 1
 
 suite "sequences":
