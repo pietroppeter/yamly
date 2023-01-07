@@ -31,3 +31,9 @@ and [jsony](https://github.com/treeform/jsony)
 - (!=jsony) parseHook requires an indentation field
 - (!=jsony) not implementing fast dumping and parsing of numbers
 - (!=jsony) using unittest (I like the check output in case of failing test)
+
+interesting features not (yet) present in jsony:
+- strict mode
+- easy way to skip fields when dumping
+- automatic camel to snake when dumping?
+- YamlParseContext/YamlDumpcontext instead of exposing s, idx, ind in signatures?

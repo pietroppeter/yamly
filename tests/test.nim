@@ -73,3 +73,20 @@ d:
   a: 1
   b: 1.5
 e: 2"""
+
+    type ObjObjObj = object
+      g: Obj
+      h: ObjObj
+
+    let ooo = ObjObjObj(g: o, h: oo)
+    check ooo.toYaml == """
+g:
+  a: 1
+  b: 1.5
+h:
+  c: 0.5
+  d:
+    a: 1
+    b: 1.5
+  e: 2"""
+
