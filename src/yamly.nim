@@ -81,7 +81,10 @@ proc dumpHook*(s: var string, ind: int, v: SomeNumber) =
     s.add ' '
   s.add $v
 
-proc dumpHook*[T](s: var string, ind: var int, a: seq[T]) =
+proc dumpHook*[T](s: var string, ind: var int, a: openarray[T]) =
+  if a.len == 0:
+    s.add " []"
+    return
   var i = 0
   if ind > 0:
     s.add "\p" & ' '.repeat(ind)

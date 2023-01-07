@@ -66,6 +66,15 @@ suite "sequences":
   - 3.0
   - 4.0"""
 
+    let ar = @[[1.0, 2.0], [3.0, 4.0]]
+    check aa.toYaml == """
+-
+  - 1.0
+  - 2.0
+-
+  - 3.0
+  - 4.0"""
+
 suite "objects":
 
   test "dump objects":
@@ -126,3 +135,7 @@ vals:
   - 1
   - 2
   - 3"""
+
+    let osEmpty = ObjSeq(vals: @[])
+    check osEmpty.toYaml == """
+vals: []"""
