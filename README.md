@@ -53,9 +53,9 @@ I will likely implement flow-style for sequences (`[1, 2]`, useful also for the 
 - (!=jsony) parseHook requires an indentation field
 - (!=jsony) not implementing fast dumping and parsing of numbers
 - (!=jsony) using unittest (I like the check output in case of failing test)
+- (!=jsony) refactor api using YamlParseContext/YamlDumpcontext instead of exposing s, idx, ind in signatures
 
 interesting features not (yet) present in jsony:
 - strict mode
 - easy way to skip fields when dumping
 - automatic camel to snake when dumping?
-- YamlParseContext/YamlDumpcontext instead of exposing s, idx, ind in signatures?

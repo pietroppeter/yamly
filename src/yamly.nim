@@ -6,6 +6,9 @@ type
     idx*: int
     ind*: int
   YamlError* = object of ValueError
+  YamlDumpContext* = object
+    data*: string
+    ind*: int
 
 template error*(y: YamlParseContext, msg: string) =
   ## Shortcut to raise an exception.
@@ -16,6 +19,19 @@ template ch*(y: YamlParseContext): char = y.data[y.idx]
 template hasChar*(y: YamlParseContext): bool = y.idx < y.data.len
 
 template inc*(y: var YamlParseContext) = inc y.idx
+
+template add*(y: var YamlDumpContext, s: string | char) = y.data.add s
+
+template newLineAndIndent*(y: var YamlDumpContext) = y.add '\n' & ' '.repeat(y.ind)
+
+template indent*(y: var YamlDumpContext, body: untyped) =
+  inc y.ind, 2
+  body
+  dec y.ind, 2
+
+template lastChar*(y: YamlDumpContext): char =
+  assert y.data.len > 0
+  y.data[y.data.high]
 
 when defined(release):
   {.push checks: off, inline.}
@@ -82,63 +98,61 @@ proc fromYaml*[T](s: string, x: typedesc[T]): T =
   var y = YamlParseContext(data: s, idx: 0, ind: 0)
   y.parseHook(result)
 
-proc dumpHook*(s: var string, ind: int, v: SomeNumber) =
-  if ind > 0:
-    s.add ' '
-  s.add $v
+proc dumpHook*(y: var YamlDumpContext, v: SomeNumber) =
+  if y.ind > 0:
+    y.add ' '
+  y.add $v
 
-proc dumpHook*[T](s: var string, ind: var int, a: openarray[T]) =
+proc dumpHook*[T](y: var YamlDumpContext, a: openarray[T]) =
   if a.len == 0:
-    s.add " []"
+    y.add " []"
     return
   var i = 0
-  if ind > 0:
-    s.add '\n' & ' '.repeat(ind)
+  if y.ind > 0:
+    y.newLineAndIndent
   for v in a:
     if i > 0:
-      s.add '\n' & ' '.repeat(ind)
-    s.add "-"
-    ind.inc 2
-    s.dumpHook(ind, v)
-    ind.dec 2
+      y.newLineAndIndent
+    y.add "-"
+    y.indent:
+      y.dumpHook(v)
     inc i
 
-template dumpKey(s: var string, v: string) =
+template dumpKey(y: var YamlDumpContext, v: string) =
   const v2 = $v & ':'
-  s.add v2
+  y.add v2
 
-proc dumpHook*(s: var string, ind: var int, v: object) =
+proc dumpHook*(y: var YamlDumpContext, v: object) =
   var i = 0
-  if ind > 0:
-    if s[^1] == ':':
-      s.add '\n' & ' '.repeat(ind)
+  if y.ind > 0:
+    if y.lastChar == ':':
+      y.newLineAndIndent
     else:
-      s.add ' '
+      y.add ' '
   when compiles(for k, e in v.pairs: discard):
     # Tables and table like objects. TODO
     for k, e in v.pairs:
       if i > 0:
-        s.add '\n' & ' '.repeat(ind)
-      s.dumpHook(ind, k) # likely needs to change
-      s.add ':'
-      ind.inc 2
-      s.dumpHook(ind, e)
-      ind.dec 2
+        y.newLineAndIndent
+      y.dumpHook(k) # likely needs to change
+      y.add ':'
+      y.indent:
+        y.dumpHook(e)
       inc i
   else:
     # Normal objects.
     for k, e in v.fieldPairs:
       if i > 0:
-        s.add '\n' & ' '.repeat(ind)
-      s.dumpKey(k)
-      ind.inc 2
-      s.dumpHook(ind, e)
-      ind.dec 2
+        y.newLineAndIndent
+      y.dumpKey(k)
+      y.indent:
+        y.dumpHook(e)
       inc i
 
 proc toYaml*[T](v: T): string =
-  var ind = 0
-  dumpHook(result, ind, v)
+  var y = YamlDumpContext(data: "", ind: 0)
+  y.dumpHook(v)
+  y.data
 
 when defined(release):
   {.pop.}
