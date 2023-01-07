@@ -1,56 +1,14 @@
 import yamly, std / unittest
 
-suite "numbers":
-  test "dump numbers":
+suite "dump symbols":
+  test "numbers":
     check toYaml(1) == "1"
     check toYaml(3.14) == "3.14"
     check toYaml(-1) == "-1"
     check toYaml(-0.1) == "-0.1"
 
-  test "parse numbers":
-    check "1".fromYaml(int) == 1
-    check "3.14".fromYaml(float) == 3.14
-    check "  -1".fromYaml(int) == -1
-    check "  \n  Inf".fromYaml(float) == Inf
-    check "  \n  # comment\n  0 # another".fromYaml(float) == 0.0
-    check "1".fromYaml(int8) == 1.int8
-    check "1".fromYaml(uint8) == 1.uint8
-    check "3.14".fromYaml(float32) == 3.14.float32
-    check "10_000".fromYaml(int) == 10_000
-
-suite "errors":
-  test "parsing errors":
-    expect(ValueError):
-      discard "a".fromYaml(int)
-
-  test "not valid yaml":
-    let s = """
-a:
-  b:
- 1
-"""
-    var y = YamlParseContext(data: s, idx: 7, ind:2)
-    var v: int
-    expect(YamlError):
-      y.parseHook(v)
-
-suite "eatUtils":
-  test "eatSpaceAndComments":
-    let s = """
-a:
-  b: # comment
-# comment
-  # comment
-     # comment
-   1
-"""
-    var y = YamlParseContext(data: s, idx: 7, ind:2)
-    var v: int
-    y.parseHook(v)
-    check v == 1
-
-suite "sequences":
-  test "dump sequences":
+suite "dump containers":
+  test "sequences":
     let a = @[1, 2, 3]
     check a.toYaml == """
 - 1
@@ -67,17 +25,14 @@ suite "sequences":
   - 4.0"""
 
     let ar = @[[1.0, 2.0], [3.0, 4.0]]
-    check aa.toYaml == """
+    check ar.toYaml == """
 -
   - 1.0
   - 2.0
 -
   - 3.0
   - 4.0"""
-
-suite "objects":
-
-  test "dump objects":
+  test "objects":
     type Obj = object
       a: int
       b: float
@@ -116,7 +71,11 @@ h:
     b: 1.5
   e: 2"""
 
-    # objects mixed with sequences
+  test "objects and sequences":
+    type Obj = object
+      a: int
+      b: float
+
     let so = @[
       Obj(a:1, b:1.0),
       Obj(a:2, b:2.0),

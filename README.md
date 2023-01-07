@@ -19,13 +19,14 @@ I will likely implement flow-style for sequences (`[1, 2]`, useful also for the 
 
 ## todo
 
-- [ ] refactor to use YamlParseContext and YamlDumpContext?
+- [x] refactor to use YamlParseContext and YamlDumpContext?
+- [x] refactor split in parse and dump separate submodules
 - [ ] symbols
   - [x] numbers
     - [x] dump
     - [x] parse
     - [ ] octal and hex
-  - [ ] boolean
+  - [ ] bool
   - [ ] enum
 - [ ] containers
   - [ ] object
@@ -54,6 +55,7 @@ I will likely implement flow-style for sequences (`[1, 2]`, useful also for the 
 - (!=jsony) not implementing fast dumping and parsing of numbers
 - (!=jsony) using unittest (I like the check output in case of failing test)
 - (!=jsony) refactor api using YamlParseContext/YamlDumpcontext instead of exposing s, idx, ind in signatures
+- (!=jsony) refactor: parse and dump are two separate modules
 
 interesting features not (yet) present in jsony:
 - strict mode
