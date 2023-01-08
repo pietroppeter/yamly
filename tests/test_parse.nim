@@ -29,6 +29,17 @@ a:
     expect(YamlError):
       y.parseHook(v)
 
+    block:
+      let s = """
+a:
+  b:
+  1
+"""
+      var y = YamlParseContext(data: s, idx: 7, ind:2)
+      var v: int
+      expect(YamlError):
+        y.parseHook(v)
+
 suite "eatUtils":
   test "eatSpaceAndComments":
     let s = """
