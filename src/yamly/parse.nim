@@ -55,7 +55,8 @@ proc eatSpaceAndComments*(y: var YamlParseContext): int =
 proc parseSymbol*(y: var YamlParseContext): string =
   ## parses a symbol and returns it
   ## used for numbers and booleans
-  if y.eatSpaceAndComments <= y.ind and y.ind > 0:
+  let ind = y.eatSpaceAndComments
+  if y.ind > 0 and ind <= y.ind:
     y.error("Symbol appears before indentation")
   let idx = y.idx
   while y.hasChar:
