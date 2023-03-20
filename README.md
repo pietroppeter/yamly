@@ -4,7 +4,7 @@
 
 A type-safe parser for a reasonable yaml dialect (i.e. not the full yaml specs, but what you usually find around).
 Implementation is basically an adaptation of [jsony](https://github.com/treeform/jsony) to yaml.
-Somewhat inspired by [strictyaml](https://github.com/crdoconnor/strictyaml) for features of yaml not implemented.
+Somewhat inspired by (Python library) [strictyaml](https://github.com/crdoconnor/strictyaml) for features of yaml not implemented.
 For a complete yaml 1.2 parser, use [NimYAML](https://github.com/flyx/NimYAML). 
 For another take of a restricted yaml parser, check out [nyml](https://github.com/openpeep/nyml).
 Ah, there is also [yanyl](https://github.com/tanelso2/yanyl).
