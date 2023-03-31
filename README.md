@@ -4,9 +4,10 @@
 
 A type-safe and loose parser for a reasonable yaml dialect (i.e. not the full yaml specs, but what you usually find around).
 Parses yaml code directly to Nim types as in [jsony](https://github.com/treeform/jsony).
-Indeed the implementation is sort of a port of jsony to yaml.
+Indeed the implementation is a port of jsony to yaml.
 
-Somewhat inspired by (Python library) [strictyaml](https://github.com/crdoconnor/strictyaml) for how to define a reasonable dialect (but I plan to support flow style)..
+Somewhat inspired by (Python library) [strictyaml](https://github.com/crdoconnor/strictyaml) for the idea that you should better give up on full Yaml specs and
+and target a reasonable dialect (but I plan to support flow style)..
 For a complete yaml 1.2 parser, use [NimYAML](https://github.com/flyx/NimYAML). 
 For another take of a restricted yaml parser, check out [nyml](https://github.com/openpeep/nyml).
 Ah, there is also [yanyl](https://github.com/tanelso2/yanyl).
