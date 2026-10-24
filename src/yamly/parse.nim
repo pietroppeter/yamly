@@ -1,4 +1,4 @@
-import std / [strutils, options, typetraits]
+import std / [strutils, options, typetraits, tables, sets, json, macros]
 from std / unicode import Rune, toUTF8
 
 type
@@ -494,7 +494,10 @@ proc skipNull*(y: var YamlParseContext): bool =
       inc y.idx, n.len
       if not y.hasChar or y.atScalarEnd(save) or y.ch == ' ':
         discard y.eatSpace
-        return true
+        # null might be a mapping key
+        if not (y.hasChar and y.ch == ':' and
+            (y.peek(1) in {' ', '\n', '\r', '\0'} or y.flow > 0 and y.peek(1) in flowIndicators)):
+          return true
       y.idx = save
   false
 
@@ -514,15 +517,459 @@ proc parseHook*[T: distinct](y: var YamlParseContext, v: var T) =
   y.parseHook(x)
   v = T(x)
 
+proc parseKey*(y: var YamlParseContext): string =
+  ## parses a mapping key (plain or quoted) and the following `:`
+  var quoted = true
+  case y.ch
+  of '"':
+    result = y.parseDoubleQuoted
+  of '\'':
+    result = y.parseSingleQuoted
+  of '?':
+    y.error("Complex mapping keys (?) are not supported.")
+  of '[', '{', '|', '>', '&', '*', '!', '%', '@', '`':
+    y.error("Invalid mapping key starting with '" & y.ch & "'.")
+  else:
+    if y.isDash:
+      y.error("Expected a mapping key, found a sequence entry.")
+    quoted = false
+    result = y.parsePlainLine
+  discard y.eatSpace
+  if not y.hasChar or y.ch != ':' or not quoted and
+      not (y.peek(1) in {' ', '\n', '\r', '\0'} or y.flow > 0 and y.peek(1) in flowIndicators):
+    y.error("Expected ':' after mapping key '" & result & "'.")
+  inc y
+
+proc isMappingStart*(y: var YamlParseContext): bool =
+  ## to be called after eatSpaceAndComments,
+  ## true if current position is the start of a key followed by `:`
+  let save = y.idx
+  try:
+    case y.ch
+    of '"': discard y.parseDoubleQuoted
+    of '\'': discard y.parseSingleQuoted
+    else: discard y.parsePlainLine
+    discard y.eatSpace
+    result = y.hasChar and y.ch == ':' and
+      (y.peek(1) in {' ', '\n', '\r', '\0'} or y.flow > 0 and y.peek(1) in flowIndicators or
+        y.data[save] in {'"', '\''})
+  except YamlError:
+    result = false
+  y.idx = save
+
+template withOwner(y: var YamlParseContext, newInd: int, newOwner: YamlOwner, body: untyped) =
+  let
+    savedInd = y.ind
+    savedOwner = y.owner
+  y.ind = newInd
+  y.owner = newOwner
+  body
+  y.ind = savedInd
+  y.owner = savedOwner
+
+template parseFlowSeqImpl*(y: var YamlParseContext, body: untyped) =
+  ## parses a flow sequence `[a, b, c]`, body is run for every entry
+  inc y
+  inc y.flow
+  while true:
+    discard y.eatSpaceAndComments
+    if not y.hasChar:
+      y.error("Unterminated flow sequence.")
+    if y.ch == ']':
+      inc y
+      break
+    body
+    discard y.eatSpaceAndComments
+    if not y.hasChar:
+      y.error("Unterminated flow sequence.")
+    if y.ch == ',':
+      inc y
+    elif y.ch == ']':
+      inc y
+      break
+    else:
+      y.error("Expected ',' or ']' in flow sequence.")
+  dec y.flow
+
+template parseFlowMapImpl*(y: var YamlParseContext, key: untyped, body: untyped) =
+  ## parses a flow mapping `{a: 1, b: 2}`, body is run for every entry
+  ## with `key` (string) defined
+  inc y
+  inc y.flow
+  while true:
+    discard y.eatSpaceAndComments
+    if not y.hasChar:
+      y.error("Unterminated flow mapping.")
+    if y.ch == '}':
+      inc y
+      break
+    let key = y.parseKey
+    body
+    discard y.eatSpaceAndComments
+    if not y.hasChar:
+      y.error("Unterminated flow mapping.")
+    if y.ch == ',':
+      inc y
+    elif y.ch == '}':
+      inc y
+      break
+    else:
+      y.error("Expected ',' or '}' in flow mapping.")
+  dec y.flow
+
+template parseSeqImpl*(y: var YamlParseContext, body: untyped) =
+  ## parses a (block or flow) sequence, body is run for every entry
+  ## and must parse it. null or an empty value is an empty sequence.
+  discard y.eatSpaceAndComments
+  if y.skipNull:
+    discard
+  elif y.ch == '[':
+    y.parseFlowSeqImpl(body)
+  else:
+    if not y.isDash:
+      y.error("Expected a sequence.")
+    if y.flow > 0:
+      y.error("Block sequences are not allowed inside flow collections.")
+    if not y.atLineStart and y.owner == ownerKey:
+      y.error("A block sequence cannot start on the same line as its key.")
+    let c = y.col
+    while true:
+      inc y
+      y.withOwner(c, ownerDash):
+        body
+      discard y.eatSpaceAndComments
+      if not y.hasChar or y.isDocMarker:
+        break
+      if not y.atLineStart:
+        y.error("Unexpected content after sequence entry.")
+      if y.col == c and y.isDash:
+        continue
+      if y.col > c:
+        y.error("Bad indentation of sequence entry.")
+      break
+
+template parseMapImpl*(y: var YamlParseContext, key: untyped, body: untyped) =
+  ## parses a (block or flow) mapping, body is run for every entry
+  ## with `key` (string) defined and must parse its value.
+  ## null or an empty value is an empty mapping.
+  discard y.eatSpaceAndComments
+  if y.skipNull:
+    discard
+  elif y.ch == '{':
+    y.parseFlowMapImpl(key, body)
+  else:
+    if y.flow > 0:
+      y.error("Block mappings are not allowed inside flow collections.")
+    if not y.atLineStart and y.owner == ownerKey:
+      y.error("A block mapping cannot start on the same line as its key.")
+    let c = y.col
+    while true:
+      let key = y.parseKey
+      y.withOwner(c, ownerKey):
+        body
+      discard y.eatSpaceAndComments
+      if not y.hasChar or y.isDocMarker:
+        break
+      if not y.atLineStart:
+        y.error("Unexpected content after mapping value.")
+      if y.col == c and not y.isDash:
+        continue
+      if y.col > c:
+        y.error("Bad indentation of mapping key.")
+      break
+
+proc fieldMatches*(field, key: string): bool =
+  ## yaml key matches a nim field if equal or equal up to style (snake_case, kebab-case)
+  field == key or nimIdentNormalize(field) == nimIdentNormalize(key.replace('-', '_'))
+
+proc parseHook*[T](y: var YamlParseContext, v: var seq[T])
+proc parseHook*[I, T](y: var YamlParseContext, v: var array[I, T])
+proc parseHook*[T](y: var YamlParseContext, v: var set[T])
+proc parseHook*[T](y: var YamlParseContext, v: var (HashSet[T] | OrderedSet[T]))
+proc parseHook*[K, V](y: var YamlParseContext, v: var (Table[K, V] | OrderedTable[K, V]))
+proc parseHook*[T: tuple](y: var YamlParseContext, v: var T)
+proc parseHook*[T: object](y: var YamlParseContext, v: var T)
+proc parseHook*[T](y: var YamlParseContext, v: var ref T)
+proc parseHook*(y: var YamlParseContext, v: var JsonNode)
+
+proc skipValue*(y: var YamlParseContext) =
+  ## skips any value
+  var n: JsonNode
+  y.parseHook(n)
+
+proc parseHook*[T](y: var YamlParseContext, v: var seq[T]) =
+  ## parses a sequence
+  v.setLen 0
+  y.parseSeqImpl:
+    var e: T
+    y.parseHook(e)
+    v.add e
+
+proc parseHook*[I, T](y: var YamlParseContext, v: var array[I, T]) =
+  ## parses an array, missing entries keep their default value
+  var n = 0
+  y.parseSeqImpl:
+    if n >= v.len:
+      y.error("Too many entries for array of length " & $v.len & ".")
+    y.parseHook(v[typeof(low(v))(ord(low(v)) + n)])
+    inc n
+
+proc parseHook*[T](y: var YamlParseContext, v: var set[T]) =
+  ## parses a set from a sequence
+  v = {}
+  y.parseSeqImpl:
+    var e: T
+    y.parseHook(e)
+    v.incl e
+
+proc parseHook*[T](y: var YamlParseContext, v: var (HashSet[T] | OrderedSet[T])) =
+  ## parses a hash set from a sequence
+  v.clear
+  y.parseSeqImpl:
+    var e: T
+    y.parseHook(e)
+    v.incl e
+
+proc parseKeyAs[K](y: var YamlParseContext, s: string, k: var K) =
+  ## parses a mapping key (already parsed as string) into a non string type
+  when K is string:
+    k = s
+  else:
+    var ky = YamlParseContext(data: s, idx: 0, ind: -1, owner: ownerTop)
+    try:
+      ky.parseHook(k)
+      discard ky.eatSpaceAndComments
+      if ky.hasChar:
+        ky.error("Unexpected content.")
+    except YamlError as e:
+      y.error("Invalid key '" & s & "': " & e.msg)
+
+proc parseHook*[K, V](y: var YamlParseContext, v: var (Table[K, V] | OrderedTable[K, V])) =
+  ## parses a table from a mapping
+  v.clear
+  y.parseMapImpl(key):
+    var
+      k: K
+      e: V
+    y.parseKeyAs(key, k)
+    y.parseHook(e)
+    v[k] = e
+
+template parseFieldsImpl(y: var YamlParseContext, v: typed, key: string, disc = "") =
+  ## parses value for field with name matching key (or skips it)
+  var
+    k = key
+    found = false
+  when compiles(renameHook(v, k)):
+    renameHook(v, k)
+  for name, e in v.fieldPairs:
+    when name != disc:
+      if not found and fieldMatches(name, k):
+        found = true
+        y.parseHook(e)
+  if not found:
+    y.skipValue
+
+macro discriminatorName(T: typedesc): string =
+  ## name of discriminator field of an object variant ("" if not a variant)
+  let impl = T.getTypeInst[1].getTypeImpl
+  if impl.kind == nnkObjectTy and impl[2].kind == nnkRecList:
+    for n in impl[2]:
+      if n.kind == nnkRecCase:
+        let d = if n[0].kind == nnkIdentDefs: n[0][0] else: n[0]
+        return newLit($d)
+  newLit("")
+
+macro discriminatorField(v: typed, name: static string): untyped =
+  newDotExpr(v, ident(name))
+
+macro newVariant(v: typed, name: static string, value: typed): untyped =
+  ## v = T(name: value)
+  newAssignment(v, nnkObjConstr.newTree(getTypeInst(v),
+    nnkExprColonExpr.newTree(ident(name), value)))
+
+proc parseHook*[T: tuple](y: var YamlParseContext, v: var T) =
+  ## parses a named tuple from a mapping and an unnamed tuple from a sequence
+  when T.isNamedTuple:
+    y.parseMapImpl(key):
+      y.parseFieldsImpl(v, key)
+  else:
+    var n = 0
+    y.parseSeqImpl:
+      var
+        i = 0
+        found = false
+      for e in v.fields:
+        if i == n:
+          found = true
+          y.parseHook(e)
+        inc i
+      if not found:
+        y.error("Too many entries for tuple of length " & $i & ".")
+      inc n
+
+proc parseHook*[T: object](y: var YamlParseContext, v: var T) =
+  ## parses an object from a mapping.
+  ## extra keys are ignored, missing keys keep their default value.
+  ## hooks used (if defined): `newHook(v)`, `renameHook(v, key)`, `postHook(v)`
+  ## for object variants the discriminator must come before the fields of its branches.
+  const disc = discriminatorName(T)
+  when compiles(newHook(v)):
+    newHook(v)
+  when disc == "":
+    y.parseMapImpl(key):
+      y.parseFieldsImpl(v, key)
+  else:
+    y.parseMapImpl(key):
+      if fieldMatches(disc, key):
+        var d: typeof(v.discriminatorField(disc))
+        y.parseHook(d)
+        let old = v
+        v.newVariant(disc, d)
+        when compiles(newHook(v)):
+          newHook(v)
+          v.newVariant(disc, d)
+        # keep fields parsed before the discriminator
+        for n1, e1 in v.fieldPairs:
+          for n2, e2 in old.fieldPairs:
+            when n1 == n2 and n1 != disc:
+              e1 = e2
+      else:
+        y.parseFieldsImpl(v, key, disc)
+  when compiles(postHook(v)):
+    postHook(v)
+
+proc parseHook*[T](y: var YamlParseContext, v: var ref T) =
+  ## parses a ref, null gives nil
+  discard y.eatSpaceAndComments
+  if y.skipNull:
+    v = nil
+  else:
+    new(v)
+    y.parseHook(v[])
+
+proc isFloatLit(s: string): bool =
+  ## true if s matches yaml 1.2 core schema float
+  ## [-+]? ( \. [0-9]+ | [0-9]+ ( \. [0-9]* )? ) ( [eE] [-+]? [0-9]+ )?
+  var i = 0
+  if i < s.len and s[i] in {'+', '-'}:
+    inc i
+  var digits = 0
+  while i < s.len and s[i] in Digits:
+    inc i
+    inc digits
+  if i < s.len and s[i] == '.':
+    inc i
+    while i < s.len and s[i] in Digits:
+      inc i
+      inc digits
+  if digits == 0:
+    return false
+  if i < s.len and s[i] in {'e', 'E'}:
+    inc i
+    if i < s.len and s[i] in {'+', '-'}:
+      inc i
+    var expDigits = 0
+    while i < s.len and s[i] in Digits:
+      inc i
+      inc expDigits
+    if expDigits == 0:
+      return false
+  i == s.len
+
+proc resolvePlain*(s: string): JsonNode =
+  ## resolves the type of a plain scalar according to yaml 1.2 core schema
+  case s
+  of "", "null", "Null", "NULL", "~":
+    return newJNull()
+  of "true", "True", "TRUE":
+    return newJBool(true)
+  of "false", "False", "FALSE":
+    return newJBool(false)
+  of ".inf", ".Inf", ".INF", "+.inf", "+.Inf", "+.INF":
+    return newJFloat(Inf)
+  of "-.inf", "-.Inf", "-.INF":
+    return newJFloat(NegInf)
+  of ".nan", ".NaN", ".NAN":
+    return newJFloat(NaN)
+  else:
+    discard
+  if s[0] in Digits or s[0] in {'+', '-', '.'}:
+    var
+      neg = false
+      mag: BiggestUInt
+    if '_' notin s and parseIntLit(s, neg, mag):
+      if not neg and mag <= BiggestUInt(high(BiggestInt)):
+        return newJInt(BiggestInt(mag))
+      if neg and mag <= BiggestUInt(high(BiggestInt)):
+        return newJInt(-BiggestInt(mag))
+    if isFloatLit(s):
+      return newJFloat(parseFloat(s))
+  newJString(s)
+
+proc parseHook*(y: var YamlParseContext, v: var JsonNode) =
+  ## parses any value into a JsonNode.
+  ## types of plain scalars are resolved according to yaml 1.2 core schema
+  ## (so `no` or `1.10.2` are strings)
+  discard y.eatSpaceAndComments
+  if y.atValueEnd:
+    v = newJNull()
+    return
+  case y.ch
+  of '[':
+    v = newJArray()
+    y.parseSeqImpl:
+      var e: JsonNode
+      y.parseHook(e)
+      v.add e
+  of '{':
+    v = newJObject()
+    y.parseMapImpl(key):
+      var e: JsonNode
+      y.parseHook(e)
+      v[key] = e
+  of '|', '>':
+    var s: string
+    y.parseHook(s)
+    v = newJString(s)
+  else:
+    if y.isDash:
+      v = newJArray()
+      y.parseSeqImpl:
+        var e: JsonNode
+        y.parseHook(e)
+        v.add e
+    elif y.flow == 0 and y.isMappingStart:
+      v = newJObject()
+      y.parseMapImpl(key):
+        var e: JsonNode
+        y.parseHook(e)
+        v[key] = e
+    elif y.ch in {'"', '\''}:
+      var s: string
+      y.parseHook(s)
+      v = newJString(s)
+    else:
+      var s: string
+      y.parseHook(s)
+      v = resolvePlain(s)
+
 proc fromYaml*[T](s: string, x: typedesc[T]): T =
   ## Takes yaml and outputs the object it represents.
   ## * Extra yaml fields are ignored.
   ## * Missing yaml fields keep their default values.
   ## * `proc newHook(foo: var ...)` Can be used to populate default values.
   var y = YamlParseContext(data: s, idx: 0, ind: -1, owner: ownerTop)
+  discard y.eatSpaceAndComments
+  if y.isDocMarker and y.data.continuesWith("---", y.idx):
+    inc y.idx, 3
   y.parseHook(result)
   discard y.eatSpaceAndComments
+  if y.hasChar and y.isDocMarker and y.data.continuesWith("...", y.idx):
+    y.idx = y.data.len
   if y.hasChar:
+    if y.isDocMarker:
+      y.error("Multiple documents are not supported.")
     y.error("Unexpected content after value.")
 
 when defined(release):

@@ -1,4 +1,4 @@
-import std / [strutils, options, typetraits, math]
+import std / [strutils, options, typetraits, math, tables, sets, json]
 
 type
   YamlDumpContext* = object
@@ -135,54 +135,158 @@ proc dumpHook*[T](y: var YamlDumpContext, v: Option[T]) =
 proc dumpHook*[T: distinct](y: var YamlDumpContext, v: T) =
   y.dumpHook(distinctBase(T)(v))
 
-proc dumpHook*[T](y: var YamlDumpContext, a: openarray[T]) =
-  if a.len == 0:
+proc dumpHook*[T](y: var YamlDumpContext, a: openarray[T])
+proc dumpHook*[T](y: var YamlDumpContext, v: set[T])
+proc dumpHook*[T](y: var YamlDumpContext, v: HashSet[T] | OrderedSet[T])
+proc dumpHook*[K, V](y: var YamlDumpContext, v: Table[K, V] | OrderedTable[K, V])
+proc dumpHook*[T: tuple](y: var YamlDumpContext, v: T)
+proc dumpHook*[T: object](y: var YamlDumpContext, v: T)
+proc dumpHook*[T](y: var YamlDumpContext, v: ref T)
+proc dumpHook*(y: var YamlDumpContext, v: JsonNode)
+
+template dumpSeqImpl*(y: var YamlDumpContext, isEmpty: bool, e, iter, body: untyped) =
+  ## dumps a block sequence, body is run for each `e` in `iter` and must dump it
+  if isEmpty:
     y.sep
     y.add "[]"
-    return
-  var i = 0
-  if y.ind > 0:
-    y.newLineAndIndent
-  for v in a:
-    if i > 0:
-      y.newLineAndIndent
-    y.add "-"
-    y.indent:
-      y.dumpHook(v)
-    inc i
-
-template dumpKey(y: var YamlDumpContext, v: string) =
-  const v2 = $v & ':'
-  y.add v2
-
-proc dumpHook*(y: var YamlDumpContext, v: object) =
-  var i = 0
-  if y.ind > 0:
-    if y.lastChar == ':':
-      y.newLineAndIndent
-    else:
-      y.add ' '
-  when compiles(for k, e in v.pairs: discard):
-    # Tables and table like objects. TODO
-    for k, e in v.pairs:
-      if i > 0:
-        y.newLineAndIndent
-      y.dumpHook(k) # likely needs to change
-      y.add ':'
-      y.indent:
-        y.dumpHook(e)
-      inc i
   else:
-    # Normal objects.
-    for k, e in v.fieldPairs:
-      if i > 0:
+    if y.ind > 0:
+      y.newLineAndIndent
+    var first = true
+    for e in iter:
+      if not first:
         y.newLineAndIndent
-      y.dumpKey(k)
+      first = false
+      y.add "-"
       y.indent:
+        body
+
+template dumpMapImpl*(y: var YamlDumpContext, isEmpty: bool, body: untyped) =
+  ## dumps a block mapping, body must dump entries using `dumpEntry`
+  if isEmpty:
+    y.sep
+    y.add "{}"
+  else:
+    if y.ind > 0:
+      if y.lastChar == ':':
+        y.newLineAndIndent
+      else:
+        y.add ' '
+    var first {.inject.} = true
+    body
+
+template dumpEntry*(y: var YamlDumpContext, key: string, body: untyped) =
+  ## dumps a mapping entry (to be used inside dumpMapImpl),
+  ## key must already be quoted if needed and include ':'
+  if not first:
+    y.newLineAndIndent
+  first = false
+  y.add key
+  y.indent:
+    body
+
+proc quoted*(s: string): string =
+  ## a double quoted version of s
+  var y = YamlDumpContext()
+  y.dumpDoubleQuoted(s)
+  y.data
+
+proc keyString*(s: string): string =
+  ## a mapping key (quoted if needed) followed by ':'
+  (if needsQuotes(s) or '\n' in s: quoted(s) else: s) & ':'
+
+proc keyString*[T](k: T): string =
+  when T is SomeNumber:
+    $k & ':'
+  elif compiles($k):
+    keyString($k)
+  else:
+    {.error: "Unsupported type for mapping keys: " & $T.}
+
+proc dumpHook*[T](y: var YamlDumpContext, a: openarray[T]) =
+  y.dumpSeqImpl(a.len == 0, e, a):
+    y.dumpHook(e)
+
+proc dumpHook*[T](y: var YamlDumpContext, v: set[T]) =
+  y.dumpSeqImpl(v.card == 0, e, v):
+    y.dumpHook(e)
+
+proc dumpHook*[T](y: var YamlDumpContext, v: HashSet[T] | OrderedSet[T]) =
+  y.dumpSeqImpl(v.len == 0, e, v):
+    y.dumpHook(e)
+
+proc dumpHook*[K, V](y: var YamlDumpContext, v: Table[K, V] | OrderedTable[K, V]) =
+  y.dumpMapImpl(v.len == 0):
+    for k, e in v.pairs:
+      y.dumpEntry(keyString(k)):
         y.dumpHook(e)
-      inc i
+
+template dumpFieldsImpl(y: var YamlDumpContext, v: typed) =
+  for k, e in v.fieldPairs:
+    when compiles(skipHook(typeof(v), k)):
+      let skip = skipHook(typeof(v), k)
+    else:
+      const skip = false
+    if not skip:
+      const key = keyString(k)
+      y.dumpEntry(key):
+        y.dumpHook(e)
+
+proc dumpHook*[T: tuple](y: var YamlDumpContext, v: T) =
+  ## dumps a named tuple as a mapping and an unnamed tuple as a sequence
+  when T.isNamedTuple:
+    y.dumpMapImpl(T.tupleLen == 0):
+      y.dumpFieldsImpl(v)
+  else:
+    y.dumpSeqImpl(T.tupleLen == 0, e, v.fields):
+      y.dumpHook(e)
+
+proc dumpHook*[T: object](y: var YamlDumpContext, v: T) =
+  ## dumps an object as a mapping.
+  ## fields for which `skipHook(T, fieldName)` is true are not dumped
+  var empty = true
+  for _ in v.fields:
+    empty = false
+  y.dumpMapImpl(empty):
+    y.dumpFieldsImpl(v)
+
+proc dumpHook*[T](y: var YamlDumpContext, v: ref T) =
+  ## dumps a ref, nil is dumped as null
+  if v == nil:
+    y.sep
+    y.add "null"
+  else:
+    y.dumpHook(v[])
+
+proc dumpHook*(y: var YamlDumpContext, v: JsonNode) =
+  ## dumps a JsonNode
+  if v == nil:
+    y.sep
+    y.add "null"
+    return
+  case v.kind
+  of JNull:
+    y.sep
+    y.add "null"
+  of JBool:
+    y.dumpHook(v.bval)
+  of JInt:
+    y.dumpHook(v.num)
+  of JFloat:
+    y.dumpHook(v.fnum)
+  of JString:
+    y.dumpHook(v.str)
+  of JArray:
+    y.dumpSeqImpl(v.len == 0, e, v.elems):
+      y.dumpHook(e)
+  of JObject:
+    y.dumpMapImpl(v.len == 0):
+      for k, e in v.fields.pairs:
+        y.dumpEntry(keyString(k)):
+          y.dumpHook(e)
 
 proc toYaml*[T](v: T): string =
+  ## dumps a value to yaml
   var y = YamlDumpContext(data: "", ind: 0)
   y.dumpHook(v)
   y.data
